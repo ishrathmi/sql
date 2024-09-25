@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="farmersmarket.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="7306"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/><expanded_item id="4" parent="1"/></tab_structure><tab_browse><table title="booth" custom_title="0" dock_id="1" table="4,5:mainbooth"/><dock_state state="000000ff00000000fd00000001000000020000000000000000fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000010100ffffff000000000000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1*">
+-- TEMP
+
+-- if a table named &quot;?&quot; exists, delete it, otherwise do nothing
+DROP TABLE IF EXISTS new_vendor_inventory;
+
+--make
+CREATE TEMP TABLE new_vendor_inventory AS
+
+--definition of it
+SELECT *,
+original_price * 5 as inflation
+FROM vendor_inventory;
+
+--put a temp table into another one
+DROP TABLE IF EXISTS new_new_vendor_inventory;
+
+CREATE TEMP TABLE new_new_vendor_inventory AS 
+SELECT *
+,inflation*2 as super_inflation
+from new_vendor_inventory;
+
+SELECT * from new_new_vendor_inventory
+</sql><sql name="SQL 2*">
+--CTEs
+
+--calculate sales per vendor per day
+
+WITH vendor_daily_sales AS (
+	SELECT md.market_date
+	,market_day
+	,market_week
+	,market_year
+	,vendor_name
+	,sum(quantity*cost_to_customer_per_qty) AS sales
+	
+	FROM market_date_info md
+	JOIN customer_purchases cp
+		on md.market_date = cp.market_date
+	JOIN vendor v 
+		on cp.vendor_id = v.vendor_id
+		
+	GROUP BY md.market_date, v.vendor_id
+)
+
+--another cte
+,a_new_cte AS (SELECT * FROM product)
+
+--re-aggregate daily sales within each week for each vendor
+SELECT market_year
+,market_week
+,vendor_name
+,sum(sales) as weekly_sales
+
+FROM vendor_daily_sales
+GROUP BY market_year, market_week, vendor_name;
+
+
+
+</sql><sql name="SQL 4*">
+-- dates
+
+--now
+SELECT DISTINCT
+DATE('now')
+,DATETIME()
+
+--strftime
+,strftime('%Y-%m','now')
+,strftime('%Y-%m-%d','2024-09-16','+50 days') as the_future
+,market_date
+,strftime('%Y-%m-%d',market_date,'+50 days','-1 year') as the_past
+
+--dateadd
+--last day of the month
+,strftime('%Y-%m-%d', market_date, 'start of month','-1 day')
+
+--datediff equiv
+,market_date
+,(julianday('now') - julianday(market_date)) / 365.25 -- number of years between now and marketdate
+,julianday('now') - julianday(market_date) -- number of days between now and each marketdate
+,(julianday('now') - julianday(market_date)) * 24 -- number of HOURS between now and each marketdate
+
+FROM market_date_info
+</sql><sql name="SQL 5*">
+--IFNULL and coalesce + NULLIF
+
+SELECT * 
+,IFNULL(product_size, 'Unknown')
+
+--less meaningful, but conceptual
+--,IFNULL(product_size,product_category_id)
+,IFNULL(product_size,product_qty_type)
+,coalesce(product_size,product_qty_type, 'missing') -- this one is easier: if the first value is null, then the second value; if the second value is null, then the third value (and onwards if you have more arguments)
+,IFNULL(IFNULL(product_size,product_qty_type),'missing')
+
+FROM product;
+
+SELECT *
+,IFNULL(product_size, 'Unknown')
+
+--nullif
+,NULLIF(product_size, '') -- finding values in the product_size column that are &quot;blanks&quot; and setting them to NULL
+,coalesce(NULLIF(product_size, ''),'unknown')
+
+from product
+
+WHERE NULLIF(product_size, '') IS NULL
+</sql><sql name="SQL 6*">SELECT *
+ 
+ 
+ FROM ( 
+ 
+	 SELECT
+	vendor_id
+	, market_date
+	,product_id
+	,original_price
+	,row_number() OVER( PARTITION by vendor_id ORDER by original_price DESC) as price_rank
+
+	FROM vendor_inventory
+) x
+
+WHERE x.price_rank =1;
+</sql><sql name="SQL 7*">drop table if EXISTS temp.row_rank_dense;
+
+create TEMP TABLE if not EXISTS temp.row_rank_dense
+
+(
+emp_id INT,
+salary INT
+
+);
+
+INSERT INTO temp.row_rank_dense
+VALUES (1, 200000),
+(2, 1000000),
+(3, 340000),
+(4, 34450600),
+(5, 10385493),
+(6,340000);
+
+
+SELECT * 
+,row_number() OVER (ORDER by salary DESC, emp_id ASC) as [row_number]
+, rank() over (order by salary DESC) as [rank]
+, dense_rank () over (ORDER by salary DESC) as [dense_rank]
+
+FROM row_rank_dense
+
+</sql><sql name="SQL 8*">--ntile (4,5,100)
+
+SELECT * 
+,NTILE(4) OVER( PARTITION BY vendor_name ORDER BY sales ASC) as quartile
+,NTILE(5) OVER( PARTITION BY vendor_name ORDER BY sales ASC) as quintile
+,NTILE(100) OVER( PARTITION BY vendor_name ORDER BY sales ASC) as percentile
+
+FROM (
+
+
+		SELECT md.market_date
+			,market_day
+			,market_week
+			,market_year
+			,vendor_name
+			,sum(quantity*cost_to_customer_per_qty) AS sales
+			
+			FROM market_date_info md
+			JOIN customer_purchases cp
+				on md.market_date = cp.market_date
+			JOIN vendor v 
+				on cp.vendor_id = v.vendor_id
+				
+			GROUP BY md.market_date, v.vendor_id
+
+) x
+
+</sql><current_tab id="6"/></tab_sql></sqlb_project>
